@@ -1,0 +1,71 @@
+version: '3.8'
+
+# This file runs our backing services for local development.
+
+services:
+  # --- PostgreSQL Database ---
+  # We use one Postgres instance with multiple databases for local dev.
+  # Our scaffolded services (`.env.example`) already have unique DB names.
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      # This is a 'trick' to create multiple databases on startup
+      # We'll create one for each of our main services.
+      POSTGRES_MULTIPLE_DATABASES: "auth_db,user_db,product_db,task_db,media_db"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # This script (from https://github.com/mrts/docker-postgresql-multiple-databases)
+      # reads the POSTGRES_MULTIPLE_DATABASES env var and creates the databases.
+      - ./docker/postgres-init-multiple-db.sh:/docker-entrypoint-initdb.d/postgres-init-multiple-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis Cache ---
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Kafka & Zookeeper (Messaging) ---
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
+    ports:
+      # Exposes the broker on localhost:9092
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      # This advertises the broker to be accessible from your host machine (laptop)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+volumes:
+  postgres-data:
+    driver: local

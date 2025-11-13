@@ -1,0 +1,15 @@
+go 1.21.0
+
+use (
+	./event-pipelines/analytics-consumer
+	./pkg/config
+	./pkg/database
+	./pkg/jwtutils
+	./pkg/kafkaclient
+	./pkg/logger
+	./services/auth-service
+	./services/media-service
+	./services/product-service
+	./services/task-service
+	./services/user-service
+)
